@@ -1,8 +1,6 @@
 // this is the provider
 provider "aws" {
   region     = "us-east-2"
-  access_key = "AKIAYUKYHRRJOPR6DFZJ"
-  secret_key = "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"
 }
 
 ## 1. Create vpc
@@ -29,8 +27,8 @@ resource "aws_route_table" "prod-route-table" {
   }
 
   route {
-    ipv6_cidr_block        = "::/0"
-    egress_only_gateway_id = aws_internet_gateway.gw.id
+    ipv6_cidr_block         = "::/0"
+    gateway_id              = aws_internet_gateway.gw.id
   }
 
   tags = {
@@ -40,12 +38,12 @@ resource "aws_route_table" "prod-route-table" {
 
 ## 4. Create a Subnet
 resource "aws_subnet" "subnet-1" {
-  vpc_id = aws_internet_gateway.gw.id
-  cidr_block = "10.0.1.0/24"
+  vpc_id            = aws_vpc.prod-vpc.id
+  cidr_block        = "10.0.1.0/24"
   availability_zone = "us-east-2a"
 
   tags = {
-    "Name" = "prod-subnet"
+    "name" = "prod-subnet"
   }
 }
 
@@ -104,8 +102,8 @@ resource "aws_security_group" "allow_tls" {
 ## 7. Create a network interface with an ip in the subnet that was created in 4
 resource "aws_network_interface" "web-server" {
   subnet_id       = aws_subnet.subnet-1.id
-  private_ips     = ["10.0.0.50"]
-  security_groups = [aws_security_group.web.id]
+  private_ips     = ["10.0.1.50"]
+  security_groups = [aws_security_group.allow_tls.id]
 
 }
 
@@ -114,6 +112,28 @@ resource "aws_eip" "one" {
   vpc                       = true
   network_interface         = aws_network_interface.web-server.id
   associate_with_private_ip = "10.0.1.50"
+  depends_on                = [aws_internet_gateway.gw]
 }
 
 ## 9. Create Ubuntu server and install/enable apache2
+resource "aws_instance" "web-server-instance" {
+  ami               = "ami-0aeb7c931a5a61206"
+  instance_type     = "t2.micro"
+  availability_zone = "us-east-2a"
+
+  network_interface {
+    device_index          = 0
+    network_interface_id  = aws_network_interface.web-server.id
+  }
+
+  user_data = <<-EOF
+              #!/bin/hash
+              sudo apt update -y
+              sudo apt install apache2 -y
+              sudo systemctl start apache2
+              sudo bash -c 'echo web server with terraform > /var/www/index.html'
+              EOF
+  tags = {
+    "name" = "web-server"
+  }
+}
