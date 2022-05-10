@@ -1,4 +1,4 @@
-#TASK
+#TASKS
 
 ## 1. Create vpc
 ## 2. Create Internet Gateway
